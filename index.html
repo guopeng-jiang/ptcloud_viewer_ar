@@ -57,12 +57,12 @@
             <!-- LAS Point Cloud Display -->
             <a-entity id="point-cloud-display"
                       las-point-cloud="src: ptCloud_subset.las;
-                                       pointSize: 0.1;
+                                       pointSize: 0.05;
                                        <!-- maxPoints: 7500000; -->
                                        useIntensityAsGrayscale: true;
                                        centerCloud: true;"
                       position="0 0 0"
-                      rotation="0 0 0">
+                      rotation="-90 0 0">
                       <!-- The las-point-cloud component will center its internal THREE.Points object
                            if centerCloud is true. The A-Frame entity's position (0,0,0 here)
                            is relative to its parent (ar-vr-world). -->
