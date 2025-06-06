@@ -80,30 +80,36 @@
                           material="color: white; shader: flat; transparent: true; opacity: 0.5"></a-entity> -->
             </a-camera>
 
-            <!-- Left hand controller - Movement -->
+            <!-- Left hand controller - NOW FOR MOVEMENT -->
             <a-entity id="left-controller"
-                     oculus-touch-controls="hand: left; model: true; orientationOffset: 0 0 0"
-                     vive-controls="hand: left; model: true; orientationOffset: 0 0 0"
-                     windows-motion-controls="hand: left; model: true"
-                     generic-tracked-controller="hand: left"
-                     valve-index-controls="hand: left"
-                     hp-mixed-reality-controls="hand: left"
-                     pico-controls="hand: left"
-                     wasd-controls-enabled="true"
+                     oculus-touch-controls="hand: left; model: true; wasd-controls-enabled: true;" <!-- Key change! -->
+                     vive-controls="hand: left; model: true; wasd-controls-enabled: true;"       <!-- Key change! -->
+                     windows-motion-controls="hand: left; model: true;" <!-- WMC might not directly drive wasd-controls this way, testing needed -->
+                     generic-tracked-controller="hand: left;"
+                     valve-index-controls="hand: left; wasd-controls-enabled: true;" <!-- Add for Index -->
+                     hp-mixed-reality-controls="hand: left; wasd-controls-enabled: true;" <!-- Add for HP -->
+                     pico-controls="hand: left; wasd-controls-enabled: true;" <!-- Add for Pico -->
                      visible="true">
+                     <!-- REMOVED wasd-controls-enabled from here, it should be on the oculus/vive/etc. component -->
             </a-entity>
 
-            <!-- Right hand controller - Zoom -->
+            <!-- Right hand controller - Zoom can be rethought or removed from joystick -->
             <a-entity id="right-controller"
-                     oculus-touch-controls="hand: right; model: true; orientationOffset: 0 0 0"
-                     vive-controls="hand: right; model: true; orientationOffset: 0 0 0"
-                     windows-motion-controls="hand: right; model: true"
-                     generic-tracked-controller="hand: right"
-                     valve-index-controls="hand: right"
-                     hp-mixed-reality-controls="hand: right"
-                     pico-controls="hand: right"
-                     vr-dem-zoom="targetEl: #ar-vr-world; zoomSpeed: 0.07; minScale: 0.005; maxScale: 5.0;"
+                     oculus-touch-controls="hand: right; model: true;"
+                     vive-controls="hand: right; model: true;"
+                     windows-motion-controls="hand: right; model: true;"
+                     generic-tracked-controller="hand: right;"
+                     valve-index-controls="hand: right;"
+                     hp-mixed-reality-controls="hand: right;"
+                     pico-controls="hand: right;"
+                     <!-- Temporarily remove or disable vr-dem-zoom from joystick input
+                          OR map it to buttons if you keep the component -->
+                     <!-- vr-dem-zoom="targetEl: #ar-vr-world; zoomSpeed: 0.07; minScale: 0.005; maxScale: 5.0;" -->
                      visible="true">
+
+                <!-- Example: If you want zoom on right controller buttons (A/B or X/Y) -->
+                <!-- This requires modifying the vr-dem-zoom component to listen to button events -->
+                <!-- For now, let's focus on joystick movement. -->
             </a-entity>
         </a-entity>
 
