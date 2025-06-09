@@ -77,13 +77,29 @@ AFRAME.registerComponent('controller-to-wasd', {
     },
 
     onAxisMove: function (evt) {
-        if (!evt.detail || !evt.detail.axis) {
+        // DETAILED LOGGING HERE:
+        console.log('[controller-to-wasd] axismove event on el:', this.el.id);
+        if (evt.detail && evt.detail.axis) {
+            console.log('[controller-to-wasd] Raw axes:', JSON.stringify(evt.detail.axis));
+            console.log('[controller-to-wasd] Configured fwdAxis:', this.data.fwdAxis, 'strafeAxis:', this.data.strafeAxis);
+            if (evt.detail.axis.length > this.data.strafeAxis) {
+                console.log('[controller-to-wasd] Raw strafeAxis value:', evt.detail.axis[this.data.strafeAxis]);
+            }
+            if (evt.detail.axis.length > this.data.fwdAxis) {
+                console.log('[controller-to-wasd] Raw fwdAxis value:', evt.detail.axis[this.data.fwdAxis]);
+            }
+        } else {
+            console.log('[controller-to-wasd] axismove event has no detail or no axis array.');
+            return;
+        }
+
+        if (!evt.detail || !evt.detail.axis) { // Original check
             return;
         }
 
         const axes = evt.detail.axis;
         let rawFwd = 0;
-        let rawStrafe = 0; // This will be used for strafe or turn input
+        let rawStrafe = 0;
 
         if (axes.length > this.data.fwdAxis) {
             rawFwd = axes[this.data.fwdAxis];
@@ -98,12 +114,11 @@ AFRAME.registerComponent('controller-to-wasd', {
 
         // Apply inversion
         if (this.data.invertFwd) this.axisValues.y *= -1;
-        if (this.data.invertStrafe) processedHorizontal *= -1; // Applies to strafe or turn
+        if (this.data.invertStrafe) processedHorizontal *= -1;
 
         this.axisValues.x = processedHorizontal;
+        // console.log('[controller-to-wasd] Processed axisValues:', JSON.stringify(this.axisValues)); // Optional: log processed values
 
-        // This Y-axis inversion is specific to how wasd-controls interprets analogue forward.
-        // Oculus thumbstick forward Y is negative. For wasd-controls, a positive analogue value moves forward.
         this.axisValues.y *= -1;
     },
 
