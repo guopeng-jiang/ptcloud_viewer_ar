@@ -1,51 +1,95 @@
 /* global AFRAME */
 
 /**
- * Bridges controller thumbstick/trackpad axismove events to wasd-controls on a target entity,
- * and can optionally handle direct rig rotation.
+ * Bridges controller thumbstick/trackpad axismove events to wasd-controls for movement,
+ * and handles rig rotation either via thumbstick axis or controller buttons.
  */
 AFRAME.registerComponent('controller-to-wasd', {
     schema: {
-        targetRig: { type: 'selector', default: '#rig' }, // The entity with wasd-controls (or the entity to rotate)
+        targetRig: { type: 'selector', default: '#rig' },
 
-        // Which axes on the controller map to forward/backward and horizontal movement/turning
-        fwdAxis: { type: 'number', default: 3 },      // Oculus Touch Left Y-axis for fwd/back
-        strafeAxis: { type: 'number', default: 2 },   // Oculus Touch Left X-axis for strafe/turn
-
-        // Behavior of the horizontal axis (strafeAxis)
-        horizontalAxisBehavior: { type: 'string', default: 'strafe', oneOf: ['strafe', 'turn'] },
-        turnSpeed: { type: 'number', default: 2 }, // Radians per second for turning
-
-        // Invert axes if needed
+        // --- Thumbstick Axis Configuration ---
+        fwdAxis: { type: 'number', default: 3 },      // Oculus Touch Left/Right Y-axis for fwd/back
+        strafeAxis: { type: 'number', default: 2 },   // Oculus Touch Left/Right X-axis for strafe/axis-turn
+        horizontalAxisBehavior: { type: 'string', default: 'strafe', oneOf: ['strafe', 'turn', 'none'] }, // 'none' if buttons handle all turning
         invertFwd: { type: 'boolean', default: false },
-        invertStrafe: { type: 'boolean', default: false }, // If behavior is 'turn', this inverts turn direction
+        invertStrafe: { type: 'boolean', default: false }, // Inverts strafe or axis-based turn
+        deadZone: { type: 'number', default: 0.15 },
 
-        deadZone: { type: 'number', default: 0.15 }
+        // --- Rotation Control Configuration ---
+        rotationControlType: { type: 'string', default: 'axis', oneOf: ['axis', 'buttons', 'none'] },
+        turnSpeed: { type: 'number', default: 2 }, // Radians per second for turning (applies to both axis and button turning)
+
+        // --- Button Rotation Configuration (if rotationControlType is 'buttons') ---
+        // Note: Component should be on the controller providing these buttons (e.g., right controller for A/B)
+        rotateRightButton: { type: 'string', default: 'abuttondown' }, // e.g., 'abuttondown' (Oculus A, Index A)
+        rotateLeftButton: { type: 'string', default: 'bbuttondown' },  // e.g., 'bbuttondown' (Oculus B, Index B)
+                                                                      // Corresponding 'up' events will be derived
     },
 
     init: function () {
         this.rigElement = null;
         this.wasdControls = null;
-        this.axisValues = { x: 0, y: 0 }; // Store processed x (strafe/turn) and y (fwd/back)
+        this.axisValues = { x: 0, y: 0 }; // Processed x (strafe/axis-turn), y (fwd/back)
+
+        this.isPressingRotateLeft = false;
+        this.isPressingRotateRight = false;
+
+        // Bind event handlers
+        this.onAxisMove = this.onAxisMove.bind(this);
+        this.onRotateLeftButtonDown = this.onRotateLeftButtonDown.bind(this);
+        this.onRotateLeftButtonUp = this.onRotateLeftButtonUp.bind(this);
+        this.onRotateRightButtonDown = this.onRotateRightButtonDown.bind(this);
+        this.onRotateRightButtonUp = this.onRotateRightButtonUp.bind(this);
 
         this.updateRigReference();
-
-        this.onAxisMove = this.onAxisMove.bind(this);
         this.el.addEventListener('axismove', this.onAxisMove);
 
-        // Check for specific controller types to adjust default axes if needed
-        // Only override if the current values match the schema's original defaults
-        const componentSchema = this.schema; // Correct way to access the component's schema
-        if (this.el.components['vive-controls']) {
-            if (this.data.fwdAxis === componentSchema.fwdAxis.default) { // Use componentSchema here
-                this.data.fwdAxis = 1; // Vive trackpad Y
+        this.setupControllerSpecificDefaults();
+        this.updateButtonListeners();
+    },
+
+    update: function(oldData) {
+        if (oldData.rotationControlType !== this.data.rotationControlType ||
+            oldData.rotateLeftButton !== this.data.rotateLeftButton ||
+            oldData.rotateRightButton !== this.data.rotateRightButton) {
+            this.updateButtonListeners();
+        }
+        if (oldData.targetRig !== this.data.targetRig) {
+            this.updateRigReference();
+        }
+        // Other schema changes like turnSpeed, deadZone, etc., will be picked up automatically.
+    },
+
+    setupControllerSpecificDefaults: function() {
+        const componentSchema = this.schema;
+        const el = this.el;
+        let controllerType = "";
+
+        if (el.components['oculus-touch-controls']) controllerType = 'oculus-touch';
+        else if (el.components['vive-controls']) controllerType = 'vive';
+        else if (el.components['valve-index-controls']) controllerType = 'valve-index';
+        // Add more controller types if needed (e.g., 'daydream-controls', 'windows-motion-controls')
+
+        // Adjust AXIS defaults if they haven't been changed by the user
+        if (controllerType === 'vive') {
+            if (this.data.fwdAxis === componentSchema.fwdAxis.default) this.data.fwdAxis = 1;
+            if (this.data.strafeAxis === componentSchema.strafeAxis.default) this.data.strafeAxis = 0;
+            console.log("controller-to-wasd: Vive controller detected, adjusting axis indices if defaults were used.");
+        }
+        // For Oculus/Index, the default axis indices (3 for Y, 2 for X) are usually correct for one of the sticks.
+
+        // Adjust BUTTON defaults if they haven't been changed by user & controller is suitable
+        // These defaults assume the component is on the RIGHT controller for A/B buttons.
+        // A-Frame typically maps Oculus A/B and Index A/B to 'abuttondown' and 'bbuttondown'.
+        if (controllerType === 'oculus-touch' || controllerType === 'valve-index') {
+            if (this.data.rotateRightButton === componentSchema.rotateRightButton.default) {
+                // 'abuttondown' is already the default, good.
             }
-            if (this.data.strafeAxis === componentSchema.strafeAxis.default) { // And here
-                this.data.strafeAxis = 0; // Vive trackpad X
+            if (this.data.rotateLeftButton === componentSchema.rotateLeftButton.default) {
+                // 'bbuttondown' is already the default, good.
             }
-            console.log("controller-to-wasd: Vive controller detected, adjusting axis indices if they were defaults.");
-        } else if (this.el.components['oculus-touch-controls']) {
-             console.log("controller-to-wasd: Oculus Touch controller detected, using default or user-set axis indices.");
+             console.log(`controller-to-wasd: ${controllerType} detected. Default A/B buttons for rotation should work.`);
         }
     },
 
@@ -60,6 +104,8 @@ AFRAME.registerComponent('controller-to-wasd', {
             }
         } else {
             console.error('controller-to-wasd: targetRig selector is null.');
+            this.rigElement = null;
+            this.wasdControls = null;
         }
     },
 
@@ -70,83 +116,98 @@ AFRAME.registerComponent('controller-to-wasd', {
             console.log('controller-to-wasd: Successfully linked to wasd-controls on', this.rigElement.id);
         } else if (this.rigElement) {
             console.warn('controller-to-wasd: Could not find wasd-controls component on targetRig:', this.data.targetRig.id,
-                         '. Turning behavior will still work if horizontalAxisBehavior is "turn". Movement might not.');
+                         '. Forward/strafe movement via thumbstick might not work. Rotation will still attempt to work.');
+            this.wasdControls = null;
         } else {
-            console.error('controller-to-wasd: targetRig resolved to null.');
+            console.error('controller-to-wasd: targetRig resolved to null after load.');
+            this.rigElement = null;
+            this.wasdControls = null;
         }
     },
 
-    onAxisMove: function (evt) {
-        // DETAILED LOGGING HERE:
-        console.log('[controller-to-wasd] axismove event on el:', this.el.id);
-        if (evt.detail && evt.detail.axis) {
-            console.log('[controller-to-wasd] Raw axes:', JSON.stringify(evt.detail.axis));
-            console.log('[controller-to-wasd] Configured fwdAxis:', this.data.fwdAxis, 'strafeAxis:', this.data.strafeAxis);
-            if (evt.detail.axis.length > this.data.strafeAxis) {
-                console.log('[controller-to-wasd] Raw strafeAxis value:', evt.detail.axis[this.data.strafeAxis]);
-            }
-            if (evt.detail.axis.length > this.data.fwdAxis) {
-                console.log('[controller-to-wasd] Raw fwdAxis value:', evt.detail.axis[this.data.fwdAxis]);
-            }
-        } else {
-            console.log('[controller-to-wasd] axismove event has no detail or no axis array.');
-            return;
-        }
+    updateButtonListeners: function() {
+        // Remove existing listeners first
+        this.el.removeEventListener(this.data.rotateLeftButton, this.onRotateLeftButtonDown);
+        this.el.removeEventListener(this.data.rotateLeftButton.replace('down', 'up'), this.onRotateLeftButtonUp);
+        this.el.removeEventListener(this.data.rotateRightButton, this.onRotateRightButtonDown);
+        this.el.removeEventListener(this.data.rotateRightButton.replace('down', 'up'), this.onRotateRightButtonUp);
 
-        if (!evt.detail || !evt.detail.axis) { // Original check
+        if (this.data.rotationControlType === 'buttons') {
+            this.el.addEventListener(this.data.rotateLeftButton, this.onRotateLeftButtonDown);
+            this.el.addEventListener(this.data.rotateLeftButton.replace('down', 'up'), this.onRotateLeftButtonUp);
+            this.el.addEventListener(this.data.rotateRightButton, this.onRotateRightButtonDown);
+            this.el.addEventListener(this.data.rotateRightButton.replace('down', 'up'), this.onRotateRightButtonUp);
+            console.log("controller-to-wasd: Button rotation listeners added for", this.data.rotateLeftButton, "and", this.data.rotateRightButton);
+        }
+    },
+
+    onRotateLeftButtonDown: function() { this.isPressingRotateLeft = true; },
+    onRotateLeftButtonUp: function() { this.isPressingRotateLeft = false; },
+    onRotateRightButtonDown: function() { this.isPressingRotateRight = true; },
+    onRotateRightButtonUp: function() { this.isPressingRotateRight = false; },
+
+    onAxisMove: function (evt) {
+        // console.log('[controller-to-wasd] axismove event on el:', this.el.id, 'Raw axes:', JSON.stringify(evt.detail.axis));
+        if (!evt.detail || !evt.detail.axis) {
             return;
         }
 
         const axes = evt.detail.axis;
         let rawFwd = 0;
-        let rawStrafe = 0;
+        let rawStrafeOrTurn = 0;
 
         if (axes.length > this.data.fwdAxis) {
             rawFwd = axes[this.data.fwdAxis];
         }
         if (axes.length > this.data.strafeAxis) {
-            rawStrafe = axes[this.data.strafeAxis];
+            rawStrafeOrTurn = axes[this.data.strafeAxis];
         }
 
-        // Apply dead zone
         this.axisValues.y = Math.abs(rawFwd) > this.data.deadZone ? rawFwd : 0;
-        let processedHorizontal = Math.abs(rawStrafe) > this.data.deadZone ? rawStrafe : 0;
+        let processedHorizontal = Math.abs(rawStrafeOrTurn) > this.data.deadZone ? rawStrafeOrTurn : 0;
 
-        // Apply inversion
         if (this.data.invertFwd) this.axisValues.y *= -1;
-        if (this.data.invertStrafe) processedHorizontal *= -1;
+        if (this.data.invertStrafe) processedHorizontal *= -1; // Applies to strafe or axis-based turn
 
         this.axisValues.x = processedHorizontal;
-        // console.log('[controller-to-wasd] Processed axisValues:', JSON.stringify(this.axisValues)); // Optional: log processed values
-
-        this.axisValues.y *= -1;
+        this.axisValues.y *= -1; // Standard inversion for wasd-controls forward
     },
 
-    tick: function (time, timeDelta) { // time and timeDelta are injected by A-Frame
-        if (!this.rigElement) {
-            return;
-        }
+    tick: function (time, timeDelta) {
+        if (!this.rigElement) { return; }
 
-        // Handle forward/backward movement via wasd-controls if available
-        let analogueY = this.axisValues.y;
-        let analogueX = 0; // Default to no strafe
+        const dt = timeDelta / 1000.0; // delta time in seconds
+        let rotationThisFrame = 0;
 
-        if (this.data.horizontalAxisBehavior === 'strafe') {
-            analogueX = this.axisValues.x; // Use horizontal axis for strafing
-        } else if (this.data.horizontalAxisBehavior === 'turn') {
-            // Horizontal axis is for turning, apply rotation directly to the rig
-            if (Math.abs(this.axisValues.x) > 0.01) { // Small deadzone for rotation
-                // Convert turnSpeed (radians per second) to rotation for this frame
-                const deltaRotation = this.axisValues.x * this.data.turnSpeed * (timeDelta / 1000.0);
-                // Positive axisValues.x (stick right) should turn character right (clockwise).
-                // Clockwise rotation around Y-axis is a negative change in radians.
-                this.rigElement.object3D.rotation.y -= deltaRotation;
+        // --- Handle Rotation ---
+        if (this.data.rotationControlType === 'buttons') {
+            if (this.isPressingRotateLeft) {
+                rotationThisFrame += this.data.turnSpeed * dt; // Positive for left turn (counter-clockwise)
             }
-            // Ensure analogueX remains 0 so wasd-controls doesn't try to strafe
-            analogueX = 0;
+            if (this.isPressingRotateRight) {
+                rotationThisFrame -= this.data.turnSpeed * dt; // Negative for right turn (clockwise)
+            }
+        } else if (this.data.rotationControlType === 'axis' && this.data.horizontalAxisBehavior === 'turn') {
+            if (Math.abs(this.axisValues.x) > 0.01) { // Small deadzone already applied in onAxisMove
+                // this.axisValues.x is positive for right stick, negative for left stick
+                // To make right stick turn right (clockwise = negative rotation), and left stick turn left (counter-clockwise = positive)
+                rotationThisFrame -= this.axisValues.x * this.data.turnSpeed * dt;
+            }
         }
 
-        // Update wasd-controls for movement (if it exists)
+        if (rotationThisFrame !== 0) {
+            this.rigElement.object3D.rotation.y += rotationThisFrame;
+        }
+
+        // --- Handle Movement (via wasd-controls if present) ---
+        let analogueY = this.axisValues.y; // Forward/backward from thumbstick
+        let analogueX = 0; // Strafe
+
+        // Only use thumbstick horizontal for strafe if not used for axis turning OR if buttons are primary for turning
+        if (this.data.horizontalAxisBehavior === 'strafe') {
+            analogueX = this.axisValues.x;
+        }
+
         if (this.wasdControls) {
             this.wasdControls.analogue = {
                 x: analogueX,
@@ -158,8 +219,13 @@ AFRAME.registerComponent('controller-to-wasd', {
 
     remove: function () {
         this.el.removeEventListener('axismove', this.onAxisMove);
+        // Remove button listeners
+        this.el.removeEventListener(this.data.rotateLeftButton, this.onRotateLeftButtonDown);
+        this.el.removeEventListener(this.data.rotateLeftButton.replace('down', 'up'), this.onRotateLeftButtonUp);
+        this.el.removeEventListener(this.data.rotateRightButton, this.onRotateRightButtonDown);
+        this.el.removeEventListener(this.data.rotateRightButton.replace('down', 'up'), this.onRotateRightButtonUp);
+
         if (this.wasdControls) {
-            // Reset analogue controls when component is removed
             this.wasdControls.analogue = { x: 0, y: 0, z: 0 };
         }
         this.rigElement = null;

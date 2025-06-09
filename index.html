@@ -90,7 +90,11 @@
                      valve-index-controls="hand: left"
                      hp-mixed-reality-controls="hand: left"
                      pico-controls="hand: left"
-                     controller-to-wasd="targetRig: #rig; horizontalAxisBehavior: turn; turnSpeed: 2.5; fwdAxis: 3; strafeAxis: 2;"
+                     controller-to-wasd="targetRig: #rig;
+                              horizontalAxisBehavior: strafe; <!-- Or 'none' if left stick X does nothing -->
+                              rotationControlType: none;      <!-- Left stick won't rotate -->
+                              fwdAxis: 3;                     <!-- Left stick Y for fwd/back -->
+                              strafeAxis: 2;">                 <!-- Left stick X for strafe -->
                      visible="true">
             </a-entity>
 
@@ -104,6 +108,14 @@
                      hp-mixed-reality-controls="hand: right"
                      pico-controls="hand: right"
                      vr-dem-zoom="targetEl: #ar-vr-world; zoomSpeed: 0.07; minScale: 0.005; maxScale: 5.0;"
+                     controller-to-wasd="targetRig: #rig;
+                              rotationControlType: buttons;
+                              turnSpeed: 2.5;
+                              rotateRightButton: abuttondown; <!-- Default, 'A' button for Oculus/Index -->
+                              rotateLeftButton: bbuttondown;  <!-- Default, 'B' button for Oculus/Index -->
+                              horizontalAxisBehavior: strafe; <!-- Or 'none' if right stick X does nothing -->
+                              fwdAxis: 3;                     <!-- Right stick Y for fwd/back -->
+                              strafeAxis: 2;">                 <!-- Right stick X for strafe (if behavior is 'strafe') -->
                      visible="true">
             </a-entity>
         </a-entity>
