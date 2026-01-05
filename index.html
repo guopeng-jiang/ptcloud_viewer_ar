@@ -4,12 +4,18 @@
     <meta charset="UTF-8">
     <title>LAS Point Cloud AR/VR Viewer</title>
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    
+    <!-- ADDED: A-Frame Extras (Required for movement-controls) -->
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
+    
     <!-- Order matters: LASParser needs to be available before pointcloud-component -->
     <script src="js/las.js"></script>
     <script src="js/dem-components.js"></script>
     <script src="js/pointcloud-component.js"></script>
     <script src="simple-button-logger.js"></script>
-    <script src="js/controller-to-wasd.js"></script>
+    
+    <!-- REMOVED: js/controller-to-wasd.js (No longer needed) -->
+
     <style>
         body { margin: 0; overflow: hidden; }
         #loader {
@@ -17,16 +23,15 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            font-size: 18px; /* Slightly smaller */
+            font-size: 18px; 
             color: white;
             background-color: rgba(0,0,0,0.85);
             padding: 20px;
-            border-radius: 8px; /* Slightly smaller */
-            z-index: 10001; /* Ensure it's on top */
-            display: block; /* Start visible */
+            border-radius: 8px; 
+            z-index: 10001; 
+            display: block; 
             text-align: center;
         }
-        /* Basic responsive style for loader */
         @media (max-width: 600px) {
             #loader {
                 width: 80%;
@@ -43,82 +48,51 @@
              antialias="true"
              renderer="colorManagement: true; physicallyCorrectLights: true;"
              stats="false"
-             debug="false"
-             ui-wrapper="false">
+             debug="false">
 
         <a-assets>
-            <!-- If your .las file is large, consider not putting it in a-assets
-                 and fetching directly, as the las-point-cloud component does.
-                 This is just a placeholder if you had other assets. -->
-            <!-- <a-asset-item id="lasModel" src="ptCloud_subset.las"></a-asset-item> -->
+            <!-- Assets here -->
         </a-assets>
 
         <!-- Wrapper for AR/VR scaling and positioning -->
         <a-entity id="ar-vr-world"
                   ar-scale-adjuster="arScale: 0.2; vrScale: 1; arYOffset: -0.2; vrYOffset: 0; defaultPosVR: 0 0 -1.5; defaultPosAR: 0 -0.1 -0.7">
+            
             <!-- LAS Point Cloud Display -->
             <a-entity id="point-cloud-display"
                       las-point-cloud="src: ptCloud_subset.las;
                                        pointSize: 0.05;
-                                       <!-- maxPoints: 7500000; -->
                                        useIntensityAsGrayscale: true;
                                        centerCloud: true;"
                       position="0 0 0"
                       rotation="-90 0 0">
-                      <!-- The las-point-cloud component will center its internal THREE.Points object
-                           if centerCloud is true. The A-Frame entity's position (0,0,0 here)
-                           is relative to its parent (ar-vr-world). -->
             </a-entity>
         </a-entity>
 
-        <!-- Camera Rig -->
-        <a-entity id="rig" position="0 3 0"
-                  wasd-controls="enabled: true; fly: true; acceleration: 45;"
-                  movement-controls="enabled: false; controls: keyboard,gamepad,touch; fly:true; speed:0.2">
-            <a-camera id="camera" look-controls="enabled: true; magicWindowTrackingEnabled: false" camera>
-                <!-- Optional: Add a cursor for gaze interactions if needed later -->
-            <!-- <a-entity cursor="rayOrigin: mouse; fuse: false;" position="0 0 -0.1"
-                        geometry="primitive: ring; radiusInner: 0.005; radiusOuter: 0.007"
-                        material="color: white; shader: flat; transparent: true; opacity: 0.5"></a-entity> -->
-            </a-camera>
+        <!-- Camera Rig 
+             UPDATED: Using standard movement-controls (fly: true) from Source 
+        -->
+        <a-entity id="rig" position="0 1.6 0"
+                  movement-controls="speed: 0.5; fly: true;">
+            
+            <a-camera id="camera" look-controls="enabled: true; magicWindowTrackingEnabled: false"></a-camera>
 
-            <!-- Left hand controller - Movement -->
+            <!-- Left Controller: Standard Movement -->
             <a-entity id="left-controller"
-                     oculus-touch-controls="hand: left; model: true; orientationOffset: 0 0 0"
-                     vive-controls="hand: left; model: true; orientationOffset: 0 0 0"
-                     windows-motion-controls="hand: left; model: true"
-                     generic-tracked-controller="hand: left"
-                     valve-index-controls="hand: left"
-                     hp-mixed-reality-controls="hand: left"
-                     pico-controls="hand: left"
-                     controller-to-wasd="targetRig: #rig;
-                              horizontalAxisBehavior: strafe; <!-- Or 'none' if left stick X does nothing -->
-                              rotationControlType: none;      <!-- Left stick won't rotate -->
-                              fwdAxis: 3;                     <!-- Left stick Y for fwd/back -->
-                              strafeAxis: 2;">                 <!-- Left stick X for strafe -->
-                     visible="true">
+                      oculus-touch-controls="hand: left; model: true;"
+                      vive-controls="hand: left; model: true;"
+                      windows-motion-controls="hand: left; model: true;"
+                      visible="true">
             </a-entity>
 
-            <!-- Right hand controller - Zoom -->
+            <!-- Right Controller: Zoom Logic -->
             <a-entity id="right-controller"
-                     oculus-touch-controls="hand: right; model: true; orientationOffset: 0 0 0"
-                     vive-controls="hand: right; model: true; orientationOffset: 0 0 0"
-                     windows-motion-controls="hand: right; model: true"
-                     generic-tracked-controller="hand: right"
-                     valve-index-controls="hand: right"
-                     hp-mixed-reality-controls="hand: right"
-                     pico-controls="hand: right"
-                     vr-dem-zoom="targetEl: #ar-vr-world; zoomSpeed: 0.07; minScale: 0.005; maxScale: 5.0;"
-                     simple-button-logger
-                     controller-to-wasd="targetRig: #rig;
-                              rotationControlType: buttons;
-                              turnSpeed: 2.5;
-                              rotateRightButton: abuttondown; <!-- Default, 'A' button for Oculus/Index -->
-                              rotateLeftButton: bbuttondown;  <!-- Default, 'B' button for Oculus/Index -->
-                              horizontalAxisBehavior: strafe; <!-- Or 'none' if right stick X does nothing -->
-                              fwdAxis: 3;                     <!-- Right stick Y for fwd/back -->
-                              strafeAxis: 2;">                 <!-- Right stick X for strafe (if behavior is 'strafe') -->
-                     visible="true">
+                      oculus-touch-controls="hand: right; model: true;"
+                      vive-controls="hand: right; model: true;"
+                      windows-motion-controls="hand: right; model: true;"
+                      vr-dem-zoom="targetEl: #ar-vr-world; speed: 1.5;"
+                      simple-button-logger
+                      visible="true">
             </a-entity>
         </a-entity>
 
